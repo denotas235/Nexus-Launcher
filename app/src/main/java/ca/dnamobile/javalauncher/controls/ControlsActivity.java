@@ -132,7 +132,7 @@ public final class ControlsActivity extends AppCompatActivity {
         adapter.clear();
         adapter.addAll(names);
         adapter.notifyDataSetChanged();
-        summary.setText("Select a layout, long-press for options. Import/export uses JSON layouts compatible with JavaLauncher, Zalith/Pojav-style, Mojo, and Amethyst-derived controls.");
+        summary.setText("Select a layout, long-press for options. Import/export uses JSON layouts compatible with JavaLauncher, controls mimmick how other launcher's work.");
     }
 
     private void selectLayout(int position) {

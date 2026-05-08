@@ -31,17 +31,8 @@ public final class TouchControlsLayoutData {
 
     public int version = 4;
     @NonNull public String name = "Touch Controls";
-    /** Pojav/Zalith/Mojo dynamic formulas use px(...) / 100 * preferredScale. */
     public float preferredScale = 100f;
-
-    /**
-     * Unit used by x/y/width/height in every TouchControlData entry.
-     * - dp: JavaLauncher layout units, converted through Android density.
-     * - px: imported/source-canvas pixels, scaled from sourceWidth/sourceHeight.
-     */
     @NonNull public String coordinateUnit = UNIT_DP;
-
-    /** Source canvas used when coordinateUnit == px. 0 means use the current screen. */
     public float sourceWidth = 0f;
     public float sourceHeight = 0f;
 

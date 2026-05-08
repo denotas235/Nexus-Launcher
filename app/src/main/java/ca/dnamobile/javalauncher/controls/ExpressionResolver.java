@@ -18,7 +18,6 @@ import androidx.annotation.Nullable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Numeric expression resolver for imported Pojav/Zalith/Mojo/Amethyst dynamicX/dynamicY values. */
 final class ExpressionResolver {
     private static final Pattern PX_FUNCTION = Pattern.compile("\\bpx\\s*\\(\\s*([-+]?[0-9]*\\.?[0-9]+)\\s*\\)");
     private static final Pattern DP_FUNCTION = Pattern.compile("\\bdp\\s*\\(\\s*([-+]?[0-9]*\\.?[0-9]+)\\s*\\)");

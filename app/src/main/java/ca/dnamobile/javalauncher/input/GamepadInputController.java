@@ -69,7 +69,7 @@ public final class GamepadInputController {
     }
 
     private final Choreographer choreographer = Choreographer.getInstance();
-    private final Context appContext;
+    private final Context context;
     private final GamepadMappingStore mappingStore;
     private final MappingRequestListener mappingRequestListener;
     private final EnumMap<GamepadButton, ActiveMappedAction[]> activeButtonActions = new EnumMap<>(GamepadButton.class);
@@ -113,7 +113,7 @@ public final class GamepadInputController {
     }
 
     public GamepadInputController(@NonNull View hostView, MappingRequestListener mappingRequestListener) {
-        appContext = hostView.getContext().getApplicationContext();
+        context = hostView.getContext().getApplicationContext();
         mappingStore = GamepadMappingStore.get(hostView.getContext());
         this.mappingRequestListener = mappingRequestListener;
 
@@ -319,10 +319,13 @@ public final class GamepadInputController {
 
         float sensitivity = BASE_GAME_CAMERA_SENSITIVITY
                 * mappingStore.getGameCameraSensitivityMultiplier();
-        float coordinateScale = getResolutionCoordinateScale();
 
-        float deltaX = rightX * acceleration * sensitivity * coordinateScale * deltaScale;
-        float deltaY = rightY * acceleration * sensitivity * coordinateScale * deltaScale;
+        // Do NOT apply resolution-scale compensation here.
+        // Minecraft camera look already interprets this as grabbed mouse/camera
+        // movement, and multiplying it by the render-resolution scale makes the
+        // right stick feel slow when the user lowers game resolution.
+        float deltaX = rightX * acceleration * sensitivity * deltaScale;
+        float deltaY = rightY * acceleration * sensitivity * deltaScale;
 
         org.lwjgl.glfw.CallbackBridge.mouseX += deltaX;
         org.lwjgl.glfw.CallbackBridge.mouseY += deltaY;
@@ -347,21 +350,21 @@ public final class GamepadInputController {
         float dy = 0f;
 
         float sensitivityMultiplier = mappingStore.getMenuCursorSensitivityMultiplier();
-        float coordinateScale = getResolutionCoordinateScale();
+        float menuResolutionScale = menuCursorResolutionScale();
 
         if (x != 0f || y != 0f) {
             float magnitude = Math.min(1f, (float) Math.sqrt(x * x + y * y));
             float acceleration = Math.max(0.35f, magnitude * magnitude);
-            float sensitivity = BASE_MENU_CURSOR_SENSITIVITY * sensitivityMultiplier;
-            dx += x * acceleration * sensitivity * coordinateScale * deltaScale;
-            dy += y * acceleration * sensitivity * coordinateScale * deltaScale;
+            float sensitivity = BASE_MENU_CURSOR_SENSITIVITY * sensitivityMultiplier * menuResolutionScale;
+            dx += x * acceleration * sensitivity * deltaScale;
+            dy += y * acceleration * sensitivity * deltaScale;
         }
 
         // Only repeat D-pad cursor movement when that D-pad direction is actually mapped
         // to a Cursor action. This fixes remapped D-pad buttons still behaving like a joystick.
         float cursorRepeatScale = (BASE_DPAD_CURSOR_STEP / CURSOR_ACTION_BASE_STEP)
                 * sensitivityMultiplier
-                * coordinateScale
+                * menuResolutionScale
                 * deltaScale;
         float[] dpadDelta = addDpadCursorRepeat(cursorRepeatScale);
         dx += dpadDelta[0];
@@ -373,41 +376,31 @@ public final class GamepadInputController {
     }
 
     /**
-     * Controller-generated mouse deltas are sent in Minecraft window coordinates.
-     * When the launcher resolution scaler lowers the game window, Android stretches
-     * that smaller buffer back to the full screen. Without this correction, 67%
-     * render scale makes the gamepad cursor feel roughly 1 / 0.67 times faster.
-     *
-     * Return the inverse stretch: 67% => 0.67, 100% => 1.0, 150% => 1.5.
+     * Menu cursor coordinates are visual/window coordinates, so lower render
+     * resolution can make the visible cursor travel too far. Keep this correction
+     * limited to menu cursor movement only; grabbed in-game camera movement must
+     * stay unscaled.
      */
-    private float getResolutionCoordinateScale() {
+    private float menuCursorResolutionScale() {
         try {
             float windowWidth = org.lwjgl.glfw.CallbackBridge.windowWidth;
-            float windowHeight = org.lwjgl.glfw.CallbackBridge.windowHeight;
             float physicalWidth = org.lwjgl.glfw.CallbackBridge.physicalWidth;
-            float physicalHeight = org.lwjgl.glfw.CallbackBridge.physicalHeight;
-
-            if (windowWidth > 1f && windowHeight > 1f && physicalWidth > 1f && physicalHeight > 1f) {
-                float x = clamp(windowWidth / physicalWidth, 0.25f, 4f);
-                float y = clamp(windowHeight / physicalHeight, 0.25f, 4f);
-                float scale = Math.min(x, y);
-
-                if (Math.abs(scale - 1f) > 0.025f) {
-                    return scale;
+            if (windowWidth > 1f && physicalWidth > 1f) {
+                float ratio = windowWidth / physicalWidth;
+                if (ratio > 0.05f && ratio < 4f && Math.abs(ratio - 1f) > 0.025f) {
+                    return clamp(ratio, 0.35f, 2.5f);
                 }
             }
         } catch (Throwable ignored) {
         }
 
         try {
-            return clamp(LauncherPreferences.getGameResolutionScalePercent(appContext) / 100f, 0.25f, 4f);
+            int percent = LauncherPreferences.getGameResolutionScalePercent(context);
+            if (percent > 0) return clamp(percent / 100f, 0.35f, 2.5f);
         } catch (Throwable ignored) {
-            return 1f;
         }
-    }
 
-    private static float clamp(float value, float min, float max) {
-        return Math.max(min, Math.min(max, value));
+        return 1f;
     }
 
     @NonNull
@@ -647,6 +640,10 @@ public final class GamepadInputController {
             rightTriggerDown = isDown;
             sendMappedButton(GamepadButton.BUTTON_R2, isDown, device);
         }
+    }
+
+    private static float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private static final class ActiveMappedAction {

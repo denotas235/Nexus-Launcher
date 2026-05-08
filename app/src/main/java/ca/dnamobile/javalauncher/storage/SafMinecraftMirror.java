@@ -141,6 +141,31 @@ public final class SafMinecraftMirror {
         }
     }
 
+    /**
+     * Resolves a path inside a previously granted SAF tree by walking child
+     * documents instead of guessing provider-specific document IDs.
+     *
+     * This is used by Open Instance Folder so a local launcher File path can be
+     * mapped back to the exact user-picked storage folder, including mirror-backed
+     * scoped storage.
+     */
+    @Nullable
+    public static Uri findRelativePathInTree(
+            @NonNull Context context,
+            @NonNull Uri treeUri,
+            @Nullable String relativePath
+    ) {
+        try {
+            Uri rootDocument = getRootDocumentUri(treeUri);
+            if (rootDocument == null) return null;
+            String cleaned = relativePath == null ? "" : cleanRelativePath(relativePath);
+            return findDescendant(context, rootDocument, cleaned);
+        } catch (Throwable throwable) {
+            Logging.i(TAG, "Unable to resolve SAF relative path " + relativePath + ": " + throwable.getMessage());
+            return null;
+        }
+    }
+
     @Nullable
     private static Uri getRootDocumentUri(@NonNull Uri treeUri) {
         try {

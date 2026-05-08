@@ -58,6 +58,7 @@ final class TouchKeyboardHelper {
     private static final int GLFW_PRESS_KEY_ESCAPE = 256;
     private static final int DEFAULT_CLEAR_BACKSPACES = 64;
     private static final long CHAT_KEYBOARD_MODE_GRACE_MS = 10_000L;
+    static final String DEFAULT_WORLD_NAME_TEXT = "New World";
 
     @Nullable private static KeyboardInputOverlay activeOverlay;
     private static long lastChatKeyPressUptimeMs;
@@ -71,9 +72,28 @@ final class TouchKeyboardHelper {
         // should submit chat. If the player pressed the launcher Chat/T key and
         // then opened the Android keyboard, Minecraft may already have released
         // grab for the chat screen, so keep a short chat grace window too.
-        // Menu text fields such as Create World name are not grabbed and do not
-        // follow a launcher Chat/T press, so Done only closes the IME there.
-        showKeyboard(source, shouldSubmitWithEnterByDefault());
+        // Menu text fields such as Create World name are opened through
+        // showMenuTextKeyboard(...) so they use DONE instead.
+        showKeyboard(source, shouldSubmitWithEnterByDefault(), null, false);
+    }
+
+    static void showChatKeyboard(@NonNull View source) {
+        // Explicit launcher keyboard buttons are intended for Minecraft chat. Do not
+        // depend on CallbackBridge.isGrabbing() here, because opening chat releases
+        // mouse grab before the user presses the Android keyboard button.
+        markChatKeyPressed();
+        showKeyboard(source, true, null, false);
+    }
+
+    static void showMenuTextKeyboard(@NonNull View source) {
+        showKeyboard(source, false, null, false);
+    }
+
+    static void showWorldNameKeyboard(@NonNull View source) {
+        // Best-effort seed for the vanilla Create World name box. Android cannot
+        // read Minecraft's internal text field, but seeding the IME makes the
+        // common "New World" flow editable without manual selection.
+        showKeyboard(source, false, DEFAULT_WORLD_NAME_TEXT, true);
     }
 
     static void markChatKeyPressed() {
@@ -87,6 +107,15 @@ final class TouchKeyboardHelper {
     }
 
     static void showKeyboard(@NonNull View source, boolean submitSendsEnter) {
+        showKeyboard(source, submitSendsEnter, null, false);
+    }
+
+    private static void showKeyboard(
+            @NonNull View source,
+            boolean submitSendsEnter,
+            @Nullable String initialText,
+            boolean selectAllInitialText
+    ) {
         hideKeyboard(false);
 
         View root = source.getRootView();
@@ -103,7 +132,7 @@ final class TouchKeyboardHelper {
             return;
         }
 
-        KeyboardInputOverlay overlay = new KeyboardInputOverlay(host.getContext(), submitSendsEnter);
+        KeyboardInputOverlay overlay = new KeyboardInputOverlay(host.getContext(), submitSendsEnter, initialText, selectAllInitialText);
         activeOverlay = overlay;
         host.addView(overlay, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -117,6 +146,22 @@ final class TouchKeyboardHelper {
         if (overlay == null) return;
         activeOverlay = null;
         overlay.close(clearText);
+    }
+
+    static boolean isKeyboardShowing() {
+        return activeOverlay != null;
+    }
+
+    static boolean isChatKeyboardShowing() {
+        KeyboardInputOverlay overlay = activeOverlay;
+        return overlay != null && overlay.submitsEnter();
+    }
+
+    static void notifyMinecraftTextChangedExternally() {
+        KeyboardInputOverlay overlay = activeOverlay;
+        if (overlay != null) {
+            overlay.rebaseAfterExternalMinecraftEdit();
+        }
     }
 
     @Nullable
@@ -214,7 +259,12 @@ final class TouchKeyboardHelper {
         private boolean closing;
         private boolean internalChange;
 
-        KeyboardInputOverlay(@NonNull Context context, boolean submitSendsEnter) {
+        KeyboardInputOverlay(
+                @NonNull Context context,
+                boolean submitSendsEnter,
+                @Nullable String initialText,
+                boolean selectAllInitialText
+        ) {
             super(context);
             this.submitSendsEnter = submitSendsEnter;
             setClickable(false);
@@ -357,16 +407,54 @@ final class TouchKeyboardHelper {
                 }
                 return false;
             });
+
+            seedInitialText(initialText, selectAllInitialText);
+        }
+
+        private void seedInitialText(@Nullable String value, boolean selectAll) {
+            if (value == null || value.isEmpty()) return;
+            internalChange = true;
+            input.setText(value);
+            lastText = value;
+            int length = input.length();
+            try {
+                if (selectAll && length > 0) input.setSelection(0, length);
+                else input.setSelection(length);
+            } catch (Throwable ignored) {
+            }
+            internalChange = false;
+            updatePreview(value);
         }
 
         void openKeyboard() {
             input.requestFocus();
-            handler.postDelayed(() -> {
-                InputMethodManager manager = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-                if (manager != null) {
-                    manager.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
-                }
-            }, 80);
+            handler.postDelayed(this::showSoftInputAgain, 80);
+        }
+
+        boolean submitsEnter() {
+            return submitSendsEnter;
+        }
+
+        void rebaseAfterExternalMinecraftEdit() {
+            if (!submitSendsEnter || closing) return;
+            handler.post(() -> {
+                if (closing) return;
+                internalChange = true;
+                input.setText("");
+                input.setSelection(0);
+                lastText = "";
+                internalChange = false;
+                preview.setText("Minecraft chat updated from selection…");
+                input.requestFocus();
+                showSoftInputAgain();
+            });
+        }
+
+        private void showSoftInputAgain() {
+            InputMethodManager manager = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (manager != null) {
+                manager.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
+            }
         }
 
         void close(boolean clearText) {

@@ -55,6 +55,8 @@ final class TouchControlButtonView extends TextView {
     private static final int GLFW_KEY_S = 83;
     private static final int GLFW_KEY_D = 68;
     private static final int GLFW_KEY_LEFT_CONTROL = 341;
+    private static final int GLFW_KEY_T = 84;
+    private static final int GLFW_KEY_SLASH = 47;
 
     private static final int GLFW_MOUSE_BUTTON_LEFT = 0;
     private static final int GLFW_MOUSE_BUTTON_RIGHT = 1;
@@ -438,8 +440,15 @@ final class TouchControlButtonView extends TextView {
 
     private void sendKey(int keyCode, boolean down) {
         CallbackBridge.setInputReady(true);
+        if (down && isChatOpenKey(keyCode)) {
+            TouchKeyboardHelper.markChatKeyPressed();
+        }
         CallbackBridge.sendKeyPress(keyCode, CallbackBridge.getCurrentMods(), down);
         CallbackBridge.setModifiers(keyCode, down);
+    }
+
+    private static boolean isChatOpenKey(int keyCode) {
+        return keyCode == GLFW_KEY_T || keyCode == GLFW_KEY_SLASH;
     }
 
     private GradientDrawable makeBackground(boolean editing) {

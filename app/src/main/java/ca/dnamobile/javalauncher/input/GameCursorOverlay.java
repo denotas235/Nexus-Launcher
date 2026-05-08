@@ -36,21 +36,6 @@ import java.io.File;
 import ca.dnamobile.javalauncher.controls.ControlsPreferences;
 
 import org.lwjgl.glfw.CallbackBridge;
-
-/**
- * Visible software cursor used for Minecraft menus.
- *
- * Important touch rule:
- * This class must never be a touch target. Earlier versions used a full-screen
- * View and then a small moving View. Both can still break Android hit testing:
- * when a child View is above the game surface, Android does not keep searching
- * lower siblings after that child rejects ACTION_DOWN.
- *
- * The Zalith-style safe approach is to keep this View gone/1x1 and draw the
- * cursor through the parent ViewGroupOverlay. ViewGroupOverlay is visual only,
- * so touchscreen taps, right-side camera swipes, Touch Controller buttons, and
- * Minecraft menu clicks continue to reach the game surface underneath.
- */
 public final class GameCursorOverlay extends View {
     private static final float CURSOR_CANVAS_DP = 28f;
 

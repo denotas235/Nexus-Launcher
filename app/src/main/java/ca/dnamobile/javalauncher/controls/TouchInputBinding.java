@@ -15,7 +15,6 @@ package ca.dnamobile.javalauncher.controls;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-/** Friendly key/mouse labels for the touch-control editor. */
 final class TouchInputBinding {
     static final class Option {
         @NonNull final String label;
@@ -27,11 +26,6 @@ final class TouchInputBinding {
         }
     }
 
-    /**
-     * These are the per-position slot options shown when a touch button is set to
-     * Keyboard / mouse slots. Positive values are GLFW key codes. Negative values
-     * are JavaLauncher special actions from TouchControlData.
-     */
     private static final Option[] KEY_OPTIONS = new Option[]{
             new Option("None", 0),
 
@@ -228,22 +222,6 @@ final class TouchInputBinding {
     }
 
     @NonNull
-    static String friendlyBinding(@NonNull TouchControlData data) {
-        if (TouchControlActions.KEY.equals(data.action)) {
-            return friendlyKeyCombo(data.normalizedKeyCodes());
-        }
-
-        Option[] options = optionsForAction(data.action);
-        int index = selectedOptionIndex(data.action, data);
-        if (index >= 0 && index < options.length) return options[index].label;
-        if (TouchControlActions.MOUSE.equals(data.action)) return "Mouse button " + data.mouseButton;
-        if (TouchControlActions.SCROLL.equals(data.action)) return "Scroll " + data.scrollY;
-        if (TouchControlActions.JOYSTICK.equals(data.action)) return "Joystick / WASD";
-        if (TouchControlActions.VIRTUAL_MOUSE.equals(data.action)) return "Toggle virtual cursor";
-        return "No extra binding needed";
-    }
-
-    @NonNull
     static String friendlyKeyCombo(@NonNull int[] codes) {
         if (codes.length == 0) return "No bindings";
 
@@ -328,30 +306,9 @@ final class TouchInputBinding {
     }
 
     @NonNull
-    static String joinCodes(@NonNull int[] codes) {
-        StringBuilder builder = new StringBuilder();
-        for (int i = 0; i < codes.length; i++) {
-            if (i > 0) builder.append(", ");
-            builder.append(codes[i]);
-        }
-        return builder.toString();
-    }
-
-    @NonNull
     static String[] optionLabels(@NonNull Option[] options) {
         String[] labels = new String[options.length];
         for (int i = 0; i < options.length; i++) labels[i] = options[i].label;
         return labels;
-    }
-
-    static boolean isDefaultLabel(@Nullable String label) {
-        if (label == null) return true;
-        String value = label.trim();
-        return value.isEmpty()
-                || "Button".equalsIgnoreCase(value)
-                || "Key".equalsIgnoreCase(value)
-                || "Mouse".equalsIgnoreCase(value)
-                || value.matches("Key\\s*-?\\d+")
-                || value.matches("Mouse\\s*-?\\d+");
     }
 }

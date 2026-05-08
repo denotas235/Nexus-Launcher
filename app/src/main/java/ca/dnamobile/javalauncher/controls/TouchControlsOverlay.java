@@ -67,6 +67,7 @@ import ca.dnamobile.javalauncher.feature.log.Logging;
 import ca.dnamobile.javalauncher.input.GameCursorOverlay;
 import ca.dnamobile.javalauncher.utils.path.PathManager;
 import net.kdt.pojavlaunch.MinecraftGLSurface;
+import net.kdt.pojavlaunch.LwjglGlfwKeycode;
 
 /**
  * Runtime/editor overlay. It deliberately avoids XML so it can be injected over the
@@ -152,7 +153,9 @@ public final class TouchControlsOverlay extends FrameLayout implements TouchCont
     /** GUI fallback: used only when Minecraft is not grabbing the mouse. */
     private int passthroughPointerId = NO_POINTER_ID;
     private long passthroughDownTime;
-
+    private float passthroughDownX;
+    private float passthroughDownY;
+    private boolean passthroughMovedPastSlop;
     /**
      * Menu fake-mouse routing. When the virtual mouse preference is enabled,
      * empty-space touches in Minecraft GUIs act like a small touchpad instead
@@ -169,6 +172,9 @@ public final class TouchControlsOverlay extends FrameLayout implements TouchCont
     /** In-game hotbar touch routing. Keep this separate from camera/buttons. */
     private int hotbarPointerId = NO_POINTER_ID;
     private int hotbarLastSlot = -1;
+    private boolean hotbarDoubleTapConsumed;
+    private int lastHotbarTapSlot = -1;
+    private long lastHotbarTapTimeMs;
 
     @NonNull private final SparseArray<TouchControlButtonView> controlPointerTargets = new SparseArray<>();
 
@@ -338,7 +344,7 @@ public final class TouchControlsOverlay extends FrameLayout implements TouchCont
         LayoutMetrics metrics = layoutMetrics(parentWidth, parentHeight);
         float density = getResources().getDisplayMetrics().density;
         for (TouchControlData control : layoutData.controls) {
-            if (!editMode && !control.visibleInGame) continue;
+            if (!editMode && !shouldCreateControlButton(control)) continue;
             TouchControlButtonView button = new TouchControlButtonView(getContext(), control, this);
             button.setEditMode(editMode);
             button.setVisibility(shouldShowControlButton(control) ? VISIBLE : INVISIBLE);
@@ -634,6 +640,7 @@ public final class TouchControlsOverlay extends FrameLayout implements TouchCont
                 cancelVirtualMousePointer();
                 applyAndroidPointerIconPolicy(false);
             }
+            applyControlsVisualStateForGrabState(grabbed);
             postInvalidateOnAnimation();
         }
         return grabbed;
@@ -952,10 +959,6 @@ public final class TouchControlsOverlay extends FrameLayout implements TouchCont
         int parentWidthUnits = Math.max(1, Math.round(metrics.maxLayoutXUnits()));
         int parentHeightUnits = Math.max(1, Math.round(metrics.maxLayoutYUnits()));
 
-        // Imported Zalith/Mojo/Amethyst controls may still have dynamic rawX/rawY
-        // formulas. Show their current resolved position converted back into the
-        // layout's own units. Saving clears rawX/rawY and keeps the button exactly
-        // where the user sees it.
         float initialLayoutX = data.rawX == null ? data.x : metrics.fromScreenX(data, editingView.getX(), editingView.getWidth());
         float initialLayoutY = data.rawY == null ? data.y : metrics.fromScreenY(editingView.getY());
 
@@ -1892,6 +1895,9 @@ public final class TouchControlsOverlay extends FrameLayout implements TouchCont
         if (passthroughPointerId == NO_POINTER_ID && passthroughTarget != null) {
             passthroughPointerId = pointerId;
             passthroughDownTime = event.getEventTime();
+            passthroughDownX = x;
+            passthroughDownY = y;
+            passthroughMovedPastSlop = false;
             dispatchSinglePointerToPassthrough(event, pointerIndex, MotionEvent.ACTION_DOWN);
             return true;
         }
@@ -1912,7 +1918,7 @@ public final class TouchControlsOverlay extends FrameLayout implements TouchCont
         }
 
         if (pointerId == hotbarPointerId) {
-            finishHotbarPointer();
+            finishHotbarPointer(true);
         }
 
         if (pointerId == virtualMousePointerId) {
@@ -1923,6 +1929,9 @@ public final class TouchControlsOverlay extends FrameLayout implements TouchCont
             dispatchSinglePointerToPassthrough(event, pointerIndex, MotionEvent.ACTION_UP);
             passthroughPointerId = NO_POINTER_ID;
             passthroughDownTime = 0L;
+            passthroughDownX = 0f;
+            passthroughDownY = 0f;
+            passthroughMovedPastSlop = false;
         }
 
         TouchControlButtonView control = controlPointerTargets.get(pointerId);
@@ -2124,7 +2133,16 @@ public final class TouchControlsOverlay extends FrameLayout implements TouchCont
     private void startHotbarPointer(int pointerId, int slot) {
         hotbarPointerId = pointerId;
         hotbarLastSlot = slot;
+        hotbarDoubleTapConsumed = false;
+
+        boolean doubleTap = isHotbarDoubleTap(slot);
         sendKeyTap(49 + slot); // GLFW_KEY_1 through GLFW_KEY_9
+
+        if (doubleTap) {
+            hotbarDoubleTapConsumed = true;
+            clearLastHotbarTap();
+            sendKeyTap(LwjglGlfwKeycode.GLFW_KEY_F);
+        }
     }
 
     private void dispatchActiveHotbarPointer(@NonNull MotionEvent event) {
@@ -2137,12 +2155,30 @@ public final class TouchControlsOverlay extends FrameLayout implements TouchCont
         if (slot < 0 || slot == hotbarLastSlot) return;
 
         hotbarLastSlot = slot;
+        hotbarDoubleTapConsumed = false;
         sendKeyTap(49 + slot);
     }
 
-    private void finishHotbarPointer() {
+    private boolean isHotbarDoubleTap(int slot) {
+        if (slot < 0 || slot != lastHotbarTapSlot || lastHotbarTapTimeMs <= 0L) return false;
+        long elapsed = SystemClock.uptimeMillis() - lastHotbarTapTimeMs;
+        return elapsed >= 0L && elapsed <= ViewConfiguration.getDoubleTapTimeout();
+    }
+
+    private void finishHotbarPointer(boolean recordTap) {
+        if (recordTap && !hotbarDoubleTapConsumed && hotbarLastSlot >= 0) {
+            lastHotbarTapSlot = hotbarLastSlot;
+            lastHotbarTapTimeMs = SystemClock.uptimeMillis();
+        }
+
         hotbarPointerId = NO_POINTER_ID;
         hotbarLastSlot = -1;
+        hotbarDoubleTapConsumed = false;
+    }
+
+    private void clearLastHotbarTap() {
+        lastHotbarTapSlot = -1;
+        lastHotbarTapTimeMs = 0L;
     }
 
     private int hotbarSlotForTouch(float x, float y) {
@@ -2463,18 +2499,38 @@ public final class TouchControlsOverlay extends FrameLayout implements TouchCont
     }
 
     private void applyControlsVisualState() {
+        applyControlsVisualStateForGrabState(isMouseGrabbed());
+    }
+
+    private void applyControlsVisualStateForGrabState(boolean grabbed) {
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             if (child instanceof TouchControlButtonView) {
                 TouchControlButtonView button = (TouchControlButtonView) child;
-                child.setVisibility(shouldShowControlButton(button.getData()) ? VISIBLE : INVISIBLE);
+                child.setVisibility(shouldShowControlButton(button.getData(), grabbed) ? VISIBLE : INVISIBLE);
             }
         }
         postInvalidateOnAnimation();
     }
 
+    private boolean shouldCreateControlButton(@NonNull TouchControlData data) {
+        return data.visibleInGame
+                || data.visibleInMenu
+                || data.visibleWhenControlsHidden
+                || TouchControlData.shouldStayVisibleWhenControlsHiddenByDefault(data.action);
+    }
+
     private boolean shouldShowControlButton(@NonNull TouchControlData data) {
-        if (editMode || controlsVisible) return true;
+        return shouldShowControlButton(data, isMouseGrabbed());
+    }
+
+    private boolean shouldShowControlButton(@NonNull TouchControlData data, boolean grabbed) {
+        if (editMode) return true;
+
+        boolean allowedInCurrentMinecraftState = grabbed ? data.visibleInGame : data.visibleInMenu;
+        if (!allowedInCurrentMinecraftState) return false;
+
+        if (controlsVisible) return true;
         return data.visibleWhenControlsHidden
                 || TouchControlData.shouldStayVisibleWhenControlsHiddenByDefault(data.action);
     }
@@ -2546,8 +2602,22 @@ public final class TouchControlsOverlay extends FrameLayout implements TouchCont
             return false;
         }
 
+        if (action == MotionEvent.ACTION_MOVE) {
+            updatePassthroughMoveState(event, pointerIndex);
+        }
+
         return dispatchSinglePointerToPassthrough(event, pointerIndex, action);
     }
+
+    private void updatePassthroughMoveState(@NonNull MotionEvent event, int pointerIndex) {
+        if (pointerIndex < 0 || pointerIndex >= event.getPointerCount()) return;
+        float dx = event.getX(pointerIndex) - passthroughDownX;
+        float dy = event.getY(pointerIndex) - passthroughDownY;
+        if ((dx * dx) + (dy * dy) > (cameraTouchSlop * cameraTouchSlop)) {
+            passthroughMovedPastSlop = true;
+        }
+    }
+
 
     private boolean dispatchSinglePointerToPassthrough(
             @NonNull MotionEvent source,
@@ -2683,10 +2753,13 @@ public final class TouchControlsOverlay extends FrameLayout implements TouchCont
 
     private void clearRuntimeTouchRouting() {
         cancelCameraPointer(true);
-        finishHotbarPointer();
+        finishHotbarPointer(false);
         cancelVirtualMousePointer();
         passthroughPointerId = NO_POINTER_ID;
         passthroughDownTime = 0L;
+        passthroughDownX = 0f;
+        passthroughDownY = 0f;
+        passthroughMovedPastSlop = false;
         controlPointerTargets.clear();
     }
 

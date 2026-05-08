@@ -17,10 +17,12 @@ import android.content.res.AssetFileDescriptor;
 import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.graphics.Point;
+import android.net.Uri;
 import android.os.CancellationSignal;
 import android.os.ParcelFileDescriptor;
 import android.provider.DocumentsContract;
 import android.provider.DocumentsContract.Document;
+import android.provider.DocumentsContract.Path;
 import android.provider.DocumentsContract.Root;
 import android.provider.DocumentsProvider;
 import android.text.TextUtils;
@@ -32,23 +34,16 @@ import androidx.annotation.Nullable;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Locale;
 
 import ca.dnamobile.javalauncher.R;
 import ca.dnamobile.javalauncher.utils.path.PathManager;
 
-/**
- * Minimal Storage Access Framework provider for the launcher folder.
- *
- * The manifest already registers this provider as:
- *     .files.JavaLauncherDocumentsProvider
- *
- * Without this class Android crashes before SplashActivity can open, because content providers
- * are created during process startup. Keep this class even if the file browser UI is not wired yet.
- */
 public class JavaLauncherDocumentsProvider extends DocumentsProvider {
-    private static final String ROOT_ID = "javalauncher_root";
-    private static final String ROOT_DOCUMENT_ID = "root";
+    public static final String AUTHORITY_SUFFIX = ".documents";
+    public static final String ROOT_ID = "javalauncher_root";
+    public static final String ROOT_DOCUMENT_ID = "root";
 
     private static final String[] DEFAULT_ROOT_PROJECTION = new String[] {
             Root.COLUMN_ROOT_ID,
@@ -77,6 +72,78 @@ public class JavaLauncherDocumentsProvider extends DocumentsProvider {
         return true;
     }
 
+    @NonNull
+    public static String getAuthority(@NonNull Context context) {
+        String authority = context.getPackageName() + AUTHORITY_SUFFIX;
+        return authority;
+    }
+
+    @NonNull
+    public static Uri buildRootUri(@NonNull Context context) {
+        return DocumentsContract.buildRootUri(getAuthority(context), ROOT_ID);
+    }
+
+    @Nullable
+    public static Uri buildDocumentUriForFile(@NonNull Context context, @NonNull File file) {
+        try {
+            return DocumentsContract.buildDocumentUri(getAuthority(context), getDocumentIdForFile(context, file));
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    @Nullable
+    public static Uri buildTreeUriForFile(@NonNull Context context, @NonNull File file) {
+        try {
+            String authority = getAuthority(context);
+            String documentId = getDocumentIdForFile(context, file);
+            Uri rootTreeUri = DocumentsContract.buildTreeDocumentUri(authority, ROOT_DOCUMENT_ID);
+            return DocumentsContract.buildDocumentUriUsingTree(rootTreeUri, documentId);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    @NonNull
+    public static File getRootDirectoryForContext(@NonNull Context context) throws FileNotFoundException {
+
+
+        File launcherHome = PathManager.getDefaultLauncherHome(context);
+        if (!launcherHome.exists() && !launcherHome.mkdirs()) {
+            throw new FileNotFoundException("Unable to create launcher home: " + launcherHome.getAbsolutePath());
+        }
+
+        File minecraftHome = new File(launcherHome, ".minecraft");
+        if (!minecraftHome.exists() && !minecraftHome.mkdirs()) {
+            throw new FileNotFoundException("Unable to create .minecraft folder: " + minecraftHome.getAbsolutePath());
+        }
+        return minecraftHome;
+    }
+
+    @NonNull
+    public static String getDocumentIdForFile(@NonNull Context context, @NonNull File file) throws FileNotFoundException {
+        try {
+            File root = getRootDirectoryForContext(context).getCanonicalFile();
+            File target = file.getCanonicalFile();
+
+            if (root.equals(target)) {
+                return ROOT_DOCUMENT_ID;
+            }
+
+            String rootPath = root.getPath();
+            String targetPath = target.getPath();
+            if (targetPath.startsWith(rootPath + File.separator)) {
+                String documentId = targetPath.substring(rootPath.length() + 1);
+                return documentId;
+            }
+            throw new FileNotFoundException("File is outside launcher document root: " + file.getAbsolutePath());
+        } catch (IOException e) {
+            FileNotFoundException wrapped = new FileNotFoundException(e.getMessage());
+            wrapped.initCause(e);
+            throw wrapped;
+        }
+    }
+
     @Override
     public Cursor queryRoots(@Nullable String[] projection) throws FileNotFoundException {
         MatrixCursor result = new MatrixCursor(resolveRootProjection(projection));
@@ -89,7 +156,8 @@ public class JavaLauncherDocumentsProvider extends DocumentsProvider {
         row.add(Root.COLUMN_FLAGS,
                 Root.FLAG_SUPPORTS_CREATE |
                         Root.FLAG_SUPPORTS_RECENTS |
-                        Root.FLAG_SUPPORTS_SEARCH);
+                        Root.FLAG_SUPPORTS_SEARCH |
+                        Root.FLAG_SUPPORTS_IS_CHILD);
         row.add(Root.COLUMN_ICON, R.mipmap.ic_launcher);
         row.add(Root.COLUMN_AVAILABLE_BYTES, root.getFreeSpace());
         return result;
@@ -98,7 +166,8 @@ public class JavaLauncherDocumentsProvider extends DocumentsProvider {
     @Override
     public Cursor queryDocument(@NonNull String documentId, @Nullable String[] projection) throws FileNotFoundException {
         MatrixCursor result = new MatrixCursor(resolveDocumentProjection(projection));
-        includeFile(result, documentId, getFileForDocumentId(documentId));
+        File file = getFileForDocumentId(documentId);
+        includeFile(result, documentId, file);
         return result;
     }
 
@@ -112,9 +181,44 @@ public class JavaLauncherDocumentsProvider extends DocumentsProvider {
         if (files == null) return result;
 
         for (File file : files) {
-            includeFile(result, getDocumentIdForFile(file), file);
+            String childDocumentId = getDocumentIdForFile(file);
+            includeFile(result, childDocumentId, file);
         }
         return result;
+    }
+
+    @Override
+    public Path findDocumentPath(@Nullable String parentDocumentId,
+                                 @NonNull String childDocumentId) throws FileNotFoundException {
+        String childId = normalizeDocumentId(childDocumentId);
+
+
+
+        boolean hasParentDocumentId = !TextUtils.isEmpty(parentDocumentId);
+        String parentId = hasParentDocumentId
+                ? normalizeDocumentId(parentDocumentId)
+                : ROOT_DOCUMENT_ID;
+
+        File child = getFileForDocumentId(childId);
+        if (!child.exists()) {
+            throw new FileNotFoundException("Document does not exist: " + childId);
+        }
+
+        if (hasParentDocumentId && !ROOT_DOCUMENT_ID.equals(parentId)) {
+            File parent = getFileForDocumentId(parentId);
+            if (!isSameOrChild(parent, child)) {
+                throw new FileNotFoundException("Document is outside requested parent: " + childId);
+            }
+        }
+
+        ArrayList<String> path = hasParentDocumentId
+                ? buildDocumentIdPathFromParent(parentId, childId)
+                : buildDocumentIdPathFromRoot(childId);
+
+
+
+        String returnedRootId = hasParentDocumentId ? null : ROOT_ID;
+        return new Path(returnedRootId, path);
     }
 
     @Override
@@ -127,6 +231,19 @@ public class JavaLauncherDocumentsProvider extends DocumentsProvider {
         String lowerQuery = query.toLowerCase(Locale.ROOT);
         searchRecursively(result, getRootDirectory(), lowerQuery, 0);
         return result;
+    }
+
+    @Override
+    public boolean isChildDocument(@NonNull String parentDocumentId, @NonNull String documentId) {
+        try {
+            File parent = getFileForDocumentId(parentDocumentId).getCanonicalFile();
+            File child = getFileForDocumentId(documentId).getCanonicalFile();
+            String parentPath = parent.getPath();
+            String childPath = child.getPath();
+            return childPath.equals(parentPath) || childPath.startsWith(parentPath + File.separator);
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     @Override
@@ -162,7 +279,7 @@ public class JavaLauncherDocumentsProvider extends DocumentsProvider {
     @Override
     public void deleteDocument(@NonNull String documentId) throws FileNotFoundException {
         File target = getFileForDocumentId(documentId);
-        if (ROOT_DOCUMENT_ID.equals(documentId) || ".minecraft".equals(documentId)) {
+        if (ROOT_DOCUMENT_ID.equals(documentId)) {
             throw new FileNotFoundException("Refusing to delete launcher root");
         }
         deleteRecursively(target);
@@ -206,7 +323,7 @@ public class JavaLauncherDocumentsProvider extends DocumentsProvider {
         if (file.isDirectory()) {
             flags |= Document.FLAG_DIR_SUPPORTS_CREATE;
         }
-        if (file.canWrite() && !ROOT_DOCUMENT_ID.equals(documentId) && !".minecraft".equals(documentId)) {
+        if (file.canWrite() && !ROOT_DOCUMENT_ID.equals(documentId)) {
             flags |= Document.FLAG_SUPPORTS_DELETE | Document.FLAG_SUPPORTS_RENAME;
         }
         if (file.isFile() && file.canWrite()) {
@@ -243,33 +360,84 @@ public class JavaLauncherDocumentsProvider extends DocumentsProvider {
     }
 
     @NonNull
+    private ArrayList<String> buildDocumentIdPathFromRoot(@NonNull String documentId) {
+        ArrayList<String> path = new ArrayList<>();
+        path.add(ROOT_DOCUMENT_ID);
+
+        if (ROOT_DOCUMENT_ID.equals(documentId)) {
+            return path;
+        }
+
+        String clean = normalizeDocumentId(documentId);
+        if (ROOT_DOCUMENT_ID.equals(clean)) {
+            return path;
+        }
+
+        String[] parts = clean.replace('\\', '/').split("/");
+        StringBuilder current = new StringBuilder();
+        for (String part : parts) {
+            if (TextUtils.isEmpty(part)) continue;
+            if (current.length() > 0) current.append('/');
+            current.append(part);
+            path.add(current.toString());
+        }
+        return path;
+    }
+
+    @NonNull
+    private ArrayList<String> buildDocumentIdPathFromParent(
+            @NonNull String parentDocumentId,
+            @NonNull String childDocumentId
+    ) {
+        ArrayList<String> fullPath = buildDocumentIdPathFromRoot(childDocumentId);
+        String parentId = normalizeDocumentId(parentDocumentId);
+
+        int parentIndex = fullPath.indexOf(parentId);
+        if (parentIndex < 0) {
+            ArrayList<String> fallback = new ArrayList<>();
+            fallback.add(parentId);
+            String childId = normalizeDocumentId(childDocumentId);
+            if (!parentId.equals(childId)) fallback.add(childId);
+            return fallback;
+        }
+
+        return new ArrayList<>(fullPath.subList(parentIndex, fullPath.size()));
+    }
+
+    @NonNull
+    private String normalizeDocumentId(@Nullable String documentId) {
+        if (TextUtils.isEmpty(documentId)) return ROOT_DOCUMENT_ID;
+        String clean = documentId.trim().replace('\\', '/');
+        while (clean.startsWith("/")) clean = clean.substring(1);
+        while (clean.endsWith("/") && clean.length() > 1) clean = clean.substring(0, clean.length() - 1);
+        return TextUtils.isEmpty(clean) ? ROOT_DOCUMENT_ID : clean;
+    }
+
+    private boolean isSameOrChild(@NonNull File parent, @NonNull File child) {
+        try {
+            File canonicalParent = parent.getCanonicalFile();
+            File canonicalChild = child.getCanonicalFile();
+            String parentPath = canonicalParent.getPath();
+            String childPath = canonicalChild.getPath();
+            return childPath.equals(parentPath) || childPath.startsWith(parentPath + File.separator);
+        } catch (IOException ignored) {
+            return false;
+        }
+    }
+
+    @NonNull
     private File getRootDirectory() throws FileNotFoundException {
         Context context = getContext();
         if (context == null) throw new FileNotFoundException("Provider context is null");
-
-        if (TextUtils.isEmpty(PathManager.DIR_GAME_HOME)) {
-            PathManager.initContextConstants(context);
-        }
-
-        // Expose the parent app-files directory through Android's Storage Access Framework.
-        // This lets the system file picker show .minecraft as a visible child folder even
-        // though the real on-disk path is inside Android/data/<package>/files.
-        File root = PathManager.getAccessibleLauncherRoot(context);
-        if (!root.exists() && !root.mkdirs()) {
-            throw new FileNotFoundException("Unable to create launcher root: " + root.getAbsolutePath());
-        }
-
-        File minecraftHome = new File(root, ".minecraft");
-        if (!minecraftHome.exists() && !minecraftHome.mkdirs()) {
-            throw new FileNotFoundException("Unable to create .minecraft folder: " + minecraftHome.getAbsolutePath());
-        }
-        return root;
+        return getRootDirectoryForContext(context);
     }
 
     @NonNull
     private File getFileForDocumentId(@NonNull String documentId) throws FileNotFoundException {
         File root = getRootDirectory();
-        if (ROOT_DOCUMENT_ID.equals(documentId)) return root;
+        if (ROOT_DOCUMENT_ID.equals(documentId)) {
+            return root;
+        }
 
         try {
             File target = new File(root, documentId).getCanonicalFile();
@@ -289,17 +457,12 @@ public class JavaLauncherDocumentsProvider extends DocumentsProvider {
 
     @NonNull
     private String getDocumentIdForFile(@NonNull File file) {
-        try {
-            File root = getRootDirectory().getCanonicalFile();
-            File target = file.getCanonicalFile();
-            if (root.equals(target)) return ROOT_DOCUMENT_ID;
-
-            String rootPath = root.getPath();
-            String targetPath = target.getPath();
-            if (targetPath.startsWith(rootPath + File.separator)) {
-                return targetPath.substring(rootPath.length() + 1);
+        Context context = getContext();
+        if (context != null) {
+            try {
+                return getDocumentIdForFile(context, file);
+            } catch (FileNotFoundException ignored) {
             }
-        } catch (IOException ignored) {
         }
         return file.getName();
     }

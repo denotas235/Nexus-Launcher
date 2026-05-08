@@ -1299,17 +1299,30 @@ public class MinecraftGLSurface extends FrameLayout implements GrabListener {
         if (isControllerLikeKeyCode(event.getKeyCode())) return false;
 
         int source = event.getSource();
-        if ((source & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
-                || (source & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK) {
-            return false;
-        }
-
         InputDevice device = event.getDevice();
-        if (isGameControllerDevice(device)) return false;
 
         boolean sourceKeyboard = (source & InputDevice.SOURCE_KEYBOARD) == InputDevice.SOURCE_KEYBOARD;
+        boolean sourceDpad = (source & InputDevice.SOURCE_DPAD) == InputDevice.SOURCE_DPAD;
         boolean deviceKeyboard = device != null && device.getKeyboardType() != InputDevice.KEYBOARD_TYPE_NONE;
-        if (!sourceKeyboard && !deviceKeyboard) return false;
+        boolean hasHardwareScanCode = safeScanCode(event) != 0;
+        boolean hasUnicode = resolveKeyChar(event) != 0;
+        boolean keyboardLikeKey = isKeyboardLikeKeyCode(event.getKeyCode());
+
+        // Some Bluetooth keyboards/keyboard-touchpad combos report keys with a
+        // DPAD/button-ish source, or expose the pointer half cleanly while the
+        // keyboard half has no KEYBOARD source. Accept normal keyboard keys from
+        // those devices as long as Android did not mark them as soft IME events.
+        boolean keyboardCandidate = sourceKeyboard
+                || deviceKeyboard
+                || (keyboardLikeKey && (sourceDpad || hasHardwareScanCode || hasUnicode));
+        if (!keyboardCandidate) return false;
+
+        // Do not reject a real keyboard just because Android also reports a
+        // pointer/game-ish source on the same Bluetooth HID device. Only block
+        // controller-looking devices when they are not keyboard candidates.
+        if (isGameControllerDevice(device) && !sourceKeyboard && !deviceKeyboard && !hasUnicode && !keyboardLikeKey) {
+            return false;
+        }
 
         switch (event.getKeyCode()) {
             case KeyEvent.KEYCODE_HOME:
@@ -1351,6 +1364,68 @@ public class MinecraftGLSurface extends FrameLayout implements GrabListener {
             return true;
         }
         return keyCode == KeyEvent.KEYCODE_DPAD_CENTER;
+    }
+
+    private static boolean isKeyboardLikeKeyCode(int keyCode) {
+        if (keyCode >= KeyEvent.KEYCODE_A && keyCode <= KeyEvent.KEYCODE_Z) return true;
+        if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) return true;
+        if (keyCode >= KeyEvent.KEYCODE_F1 && keyCode <= KeyEvent.KEYCODE_F12) return true;
+        if (keyCode >= KeyEvent.KEYCODE_NUMPAD_0 && keyCode <= KeyEvent.KEYCODE_NUMPAD_9) return true;
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_SPACE:
+            case KeyEvent.KEYCODE_APOSTROPHE:
+            case KeyEvent.KEYCODE_COMMA:
+            case KeyEvent.KEYCODE_MINUS:
+            case KeyEvent.KEYCODE_PERIOD:
+            case KeyEvent.KEYCODE_SLASH:
+            case KeyEvent.KEYCODE_SEMICOLON:
+            case KeyEvent.KEYCODE_EQUALS:
+            case KeyEvent.KEYCODE_LEFT_BRACKET:
+            case KeyEvent.KEYCODE_BACKSLASH:
+            case KeyEvent.KEYCODE_RIGHT_BRACKET:
+            case KeyEvent.KEYCODE_GRAVE:
+            case KeyEvent.KEYCODE_ESCAPE:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+            case KeyEvent.KEYCODE_TAB:
+            case KeyEvent.KEYCODE_DEL:
+            case KeyEvent.KEYCODE_INSERT:
+            case KeyEvent.KEYCODE_FORWARD_DEL:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_PAGE_UP:
+            case KeyEvent.KEYCODE_PAGE_DOWN:
+            case KeyEvent.KEYCODE_MOVE_HOME:
+            case KeyEvent.KEYCODE_MOVE_END:
+            case KeyEvent.KEYCODE_CAPS_LOCK:
+            case KeyEvent.KEYCODE_SCROLL_LOCK:
+            case KeyEvent.KEYCODE_NUM_LOCK:
+            case KeyEvent.KEYCODE_SYSRQ:
+            case KeyEvent.KEYCODE_BREAK:
+            case KeyEvent.KEYCODE_NUMPAD_DOT:
+            case KeyEvent.KEYCODE_NUMPAD_DIVIDE:
+            case KeyEvent.KEYCODE_NUMPAD_MULTIPLY:
+            case KeyEvent.KEYCODE_NUMPAD_SUBTRACT:
+            case KeyEvent.KEYCODE_NUMPAD_ADD:
+            case KeyEvent.KEYCODE_NUMPAD_EQUALS:
+            case KeyEvent.KEYCODE_NUMPAD_LEFT_PAREN:
+            case KeyEvent.KEYCODE_NUMPAD_RIGHT_PAREN:
+            case KeyEvent.KEYCODE_SHIFT_LEFT:
+            case KeyEvent.KEYCODE_CTRL_LEFT:
+            case KeyEvent.KEYCODE_ALT_LEFT:
+            case KeyEvent.KEYCODE_META_LEFT:
+            case KeyEvent.KEYCODE_SHIFT_RIGHT:
+            case KeyEvent.KEYCODE_CTRL_RIGHT:
+            case KeyEvent.KEYCODE_ALT_RIGHT:
+            case KeyEvent.KEYCODE_META_RIGHT:
+            case KeyEvent.KEYCODE_MENU:
+                return true;
+            default:
+                return false;
+        }
     }
 
 
