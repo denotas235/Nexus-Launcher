@@ -17,7 +17,6 @@ import ca.dnamobile.javalauncher.data.AccountStore;
 import ca.dnamobile.javalauncher.instance.LauncherInstance;
 import ca.dnamobile.javalauncher.ui.instance.CreateInstanceDialog;
 import ca.dnamobile.javalauncher.ui.instance.LauncherInstanceAdapter;
-import net.kdt.pojavlaunch.MainActivity;
 
 /**
  * Main launcher activity — instance list, account badge, and game launch entry.
