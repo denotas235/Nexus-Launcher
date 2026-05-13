@@ -3,8 +3,11 @@ package ca.dnamobile.javalauncher.launcher;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.io.File;
+
 import ca.dnamobile.javalauncher.data.AccountStore;
 import ca.dnamobile.javalauncher.instance.LauncherInstance;
+import ca.dnamobile.javalauncher.utils.path.PathManager;
 
 /**
  * Immutable description of everything needed to start a Minecraft game session.
@@ -69,4 +72,32 @@ public final class LaunchPlan {
     public String getMinecraftUuid() {
         return account.accountId.replace("-", "").toLowerCase(java.util.Locale.US);
     }
+
+    /**
+     * Returns the Minecraft game directory for this launch.
+     * Delegates to the underlying {@link LauncherInstance}.
+     */
+    @NonNull
+    public File getGameDirectory() {
+        return instance.getGameDirectory();
+    }
+
+    /**
+     * Returns the Java runtime home directory for this launch.
+     *
+     * The directory is resolved from {@link PathManager#DIR_MULTIRT_HOME}
+     * and the {@code resolvedRuntime} identifier set at plan construction.
+     * Falls back to {@code PathManager.DIR_MULTIRT_HOME/resolvedRuntime}
+     * if PathManager has not been initialised yet.
+     */
+    @NonNull
+    public File getRuntimeDirectory() {
+        String multiRtHome = PathManager.DIR_MULTIRT_HOME;
+        if (multiRtHome != null && !multiRtHome.trim().isEmpty()) {
+            return new File(multiRtHome, resolvedRuntime);
+        }
+        // Fallback before PathManager.initContextConstants() has been called
+        return new File("runtimes", resolvedRuntime);
+    }
 }
+
