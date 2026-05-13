@@ -1,5 +1,6 @@
 package ca.dnamobile.javalauncher;
 
+import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
@@ -11,6 +12,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import java.lang.ref.WeakReference;
 import java.util.Collections;
 
 import ca.dnamobile.javalauncher.data.AccountStore;
@@ -23,6 +25,24 @@ import ca.dnamobile.javalauncher.ui.instance.LauncherInstanceAdapter;
  */
 public final class MainActivity extends AppCompatActivity
         implements LauncherInstanceAdapter.Listener {
+
+    private static WeakReference<Activity> currentActivity = new WeakReference<>(null);
+
+    public static void setCurrentActivity(@Nullable Activity activity) {
+        currentActivity = new WeakReference<>(activity);
+    }
+
+    public static void clearCurrentActivity(@Nullable Activity activity) {
+        Activity current = currentActivity.get();
+        if (current == activity) {
+            currentActivity.clear();
+        }
+    }
+
+    @Nullable
+    public static Activity getCurrentActivity() {
+        return currentActivity.get();
+    }
 
     private AccountStore accountStore;
     private LauncherInstanceAdapter instanceAdapter;
@@ -111,12 +131,10 @@ public final class MainActivity extends AppCompatActivity
         new CreateInstanceDialog(this, Collections.emptyList(), new CreateInstanceDialog.Listener() {
             @Override
             public void onPickIcon(@NonNull CreateInstanceDialog dialog) {
-                // Icon picking not implemented in offline build
             }
 
             @Override
             public void onCreateInstance(@NonNull CreateInstanceDialog.Request request) {
-                // Instance creation handled by dialog internally
                 updateAccountBadge();
             }
         }).show();
@@ -129,7 +147,7 @@ public final class MainActivity extends AppCompatActivity
             startActivity(new Intent(this, LauncherSettingsActivity.class));
             return;
         }
-        // Actual launch delegated to PojavLauncher MainActivity with instance context
         MainActivity.setCurrentActivity(this);
     }
 }
+
