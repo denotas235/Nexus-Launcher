@@ -47,6 +47,35 @@ public final class InstanceLaunchSettings {
         return RUNTIME_NAMES[index];
     }
 
+    // ── Key resolution ────────────────────────────────────────────────────────
+
+    /**
+     * Resolves a stable SharedPreferences key for an instance.
+     *
+     * If {@code preferredKey} is non-null and non-empty it is used directly.
+     * Otherwise {@code fallbackKey} is returned. The result is never null.
+     *
+     * This allows callers to prefer a stable instance ID while gracefully
+     * falling back to a display name or other identifier when the ID is absent.
+     *
+     * @param preferredKey the preferred (usually stable) key; may be null or empty
+     * @param fallbackKey  the fallback key used when preferredKey is absent
+     * @return a non-null, non-empty key suitable for SharedPreferences lookup
+     */
+    @NonNull
+    public static String resolveInstanceKey(
+            @Nullable String preferredKey,
+            @Nullable String fallbackKey
+    ) {
+        if (preferredKey != null && !preferredKey.trim().isEmpty()) {
+            return preferredKey.trim();
+        }
+        if (fallbackKey != null && !fallbackKey.trim().isEmpty()) {
+            return fallbackKey.trim();
+        }
+        return "default";
+    }
+
     // ── Settings data class ───────────────────────────────────────────────────
 
     public static final class Settings {
@@ -102,3 +131,4 @@ public final class InstanceLaunchSettings {
 
     private InstanceLaunchSettings() {}
 }
+
