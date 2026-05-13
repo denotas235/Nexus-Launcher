@@ -61,7 +61,7 @@ public final class MinecraftArgBuilder {
         File versionJson = new File(versionDir, versionId + ".json");
 
         if (!versionJson.exists()) {
-            Logging.w(TAG, "Version JSON not found: " + versionJson.getAbsolutePath());
+            Logging.e(TAG, "Version JSON not found: " + versionJson.getAbsolutePath());
             return null;
         }
 
@@ -76,7 +76,7 @@ public final class MinecraftArgBuilder {
         try {
             versionData = resolveInheritance(gameDir, versionData);
         } catch (Exception e) {
-            Logging.w(TAG, "Inheritance resolution failed — proceeding with base only", e);
+            Logging.e(TAG, "Inheritance resolution failed — proceeding with base only", e);
         }
 
         // Runtime directory
@@ -358,7 +358,7 @@ public final class MinecraftArgBuilder {
 
         File parentJson = new File(gameDir, "versions/" + inheritsFrom + "/" + inheritsFrom + ".json");
         if (!parentJson.exists()) {
-            Logging.w(TAG, "Parent version JSON not found: " + parentJson.getAbsolutePath());
+            Logging.e(TAG, "Parent version JSON not found: " + parentJson.getAbsolutePath());
             return version;
         }
 
