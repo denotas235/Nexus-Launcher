@@ -46,15 +46,15 @@ public final class LoaderVersionResolver {
      * A single loader version entry shown in the create-instance dialog spinner.
      *
      * {@code displayName} is the label shown to the user.
-     * {@code versionId}   is the identifier passed to the installer.
+     * {@code loaderVersion}   is the identifier passed to the installer.
      */
     public static final class LoaderVersionOption {
         @NonNull  public final String displayName;
-        @NonNull  public final String versionId;
+        @NonNull  public final String loaderVersion;
 
-        public LoaderVersionOption(@NonNull String displayName, @NonNull String versionId) {
+        public LoaderVersionOption(@NonNull String displayName, @NonNull String loaderVersion) {
             this.displayName = displayName;
-            this.versionId   = versionId;
+            this.loaderVersion   = loaderVersion;
         }
 
         @NonNull
