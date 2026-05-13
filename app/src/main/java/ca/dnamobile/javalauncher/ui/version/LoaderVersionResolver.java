@@ -10,7 +10,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -37,7 +40,143 @@ public final class LoaderVersionResolver {
 
     private LoaderVersionResolver() {}
 
-    // ── Fabric ────────────────────────────────────────────────────────────────
+    // ── LoaderVersionOption ───────────────────────────────────────────────────
+
+    /**
+     * A single loader version entry shown in the create-instance dialog spinner.
+     *
+     * {@code displayName} is the label shown to the user.
+     * {@code versionId}   is the identifier passed to the installer.
+     */
+    public static final class LoaderVersionOption {
+        @NonNull  public final String displayName;
+        @NonNull  public final String versionId;
+
+        public LoaderVersionOption(@NonNull String displayName, @NonNull String versionId) {
+            this.displayName = displayName;
+            this.versionId   = versionId;
+        }
+
+        @NonNull
+        @Override
+        public String toString() {
+            return displayName;
+        }
+    }
+
+    /**
+     * Synchronously fetches loader version options.
+     * Must be called from a background thread.
+     *
+     * @param loader          loader name ("fabric", "forge", "neoforge")
+     * @param minecraftVersion Minecraft version string (e.g. "1.20.4")
+     * @return list of options, may be empty but never null
+     * @throws IOException on network failure
+     */
+    @NonNull
+    public static ArrayList<LoaderVersionOption> resolveVersions(
+            @Nullable String loader,
+            @Nullable String minecraftVersion
+    ) throws IOException {
+        if (loader == null || minecraftVersion == null) return new ArrayList<>();
+
+        switch (loader.toLowerCase(java.util.Locale.ROOT)) {
+            case "fabric":
+                return resolveFabricSync(minecraftVersion);
+            case "neoforge":
+                return resolveNeoForgeSync(minecraftVersion);
+            case "forge":
+                return resolveForgeSync(minecraftVersion);
+            default:
+                return new ArrayList<>();
+        }
+    }
+
+    @NonNull
+    private static ArrayList<LoaderVersionOption> resolveFabricSync(
+            @NonNull String minecraftVersion
+    ) throws IOException {
+        String json = httpGet(String.format(java.util.Locale.ROOT, FABRIC_LOADER_URL, minecraftVersion));
+        ArrayList<LoaderVersionOption> result = new ArrayList<>();
+        try {
+            JSONArray array = new JSONArray(json);
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject obj = array.getJSONObject(i);
+                JSONObject loaderObj = obj.optJSONObject("loader");
+                if (loaderObj == null) continue;
+                String version = loaderObj.optString("version", "");
+                boolean stable = loaderObj.optBoolean("stable", true);
+                if (version.isEmpty()) continue;
+                String label = stable ? version : version + " (beta)";
+                result.add(new LoaderVersionOption(label, version));
+            }
+        } catch (Exception e) {
+            throw new IOException("Fabric parse error: " + e.getMessage(), e);
+        }
+        return result;
+    }
+
+    @NonNull
+    private static ArrayList<LoaderVersionOption> resolveNeoForgeSync(
+            @NonNull String minecraftVersion
+    ) throws IOException {
+        String json = httpGet(NEOFORGE_VERSIONS_URL);
+        ArrayList<LoaderVersionOption> result = new ArrayList<>();
+        String prefix = buildNeoForgePrefix(minecraftVersion);
+        try {
+            JSONObject root = new JSONObject(json);
+            JSONArray versions = root.optJSONArray("versions");
+            if (versions == null) return result;
+            for (int i = versions.length() - 1; i >= 0; i--) {
+                String v = versions.getString(i);
+                if (prefix == null || v.startsWith(prefix)) {
+                    result.add(new LoaderVersionOption(v, v));
+                }
+            }
+        } catch (Exception e) {
+            throw new IOException("NeoForge parse error: " + e.getMessage(), e);
+        }
+        return result;
+    }
+
+    @Nullable
+    private static String buildNeoForgePrefix(@NonNull String mcVersion) {
+        String[] parts = mcVersion.split("\\.");
+        if (parts.length < 2) return null;
+        try {
+            int minor = Integer.parseInt(parts[1]);
+            String patch = parts.length >= 3 ? parts[2] : "";
+            return minor + (patch.isEmpty() ? "." : "." + patch + ".");
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    @NonNull
+    private static ArrayList<LoaderVersionOption> resolveForgeSync(
+            @NonNull String minecraftVersion
+    ) throws IOException {
+        String json = httpGet(FORGE_PROMO_URL);
+        ArrayList<LoaderVersionOption> result = new ArrayList<>();
+        try {
+            JSONObject promos = new JSONObject(json).getJSONObject("promos");
+            String recommended = promos.optString(minecraftVersion + "-recommended", null);
+            String latest      = promos.optString(minecraftVersion + "-latest",      null);
+            if (recommended != null) {
+                String full = minecraftVersion + "-" + recommended;
+                result.add(new LoaderVersionOption(full + " (recommended)", full));
+            }
+            if (latest != null && !latest.equals(recommended)) {
+                String full = minecraftVersion + "-" + latest;
+                result.add(new LoaderVersionOption(full + " (latest)", full));
+            }
+        } catch (Exception e) {
+            throw new IOException("Forge parse error: " + e.getMessage(), e);
+        }
+        return result;
+    }
+
+    // ── Async helpers (kept for other callers) ────────────────────────────────
 
     public interface FabricCallback {
         void onResult(@NonNull List<String> loaderVersions);
@@ -55,8 +194,8 @@ public final class LoaderVersionResolver {
                 List<String> versions = new ArrayList<>();
                 for (int i = 0; i < arr.length(); i++) {
                     JSONObject entry = arr.getJSONObject(i);
-                    JSONObject loader = entry.getJSONObject("loader");
-                    versions.add(loader.getString("version"));
+                    JSONObject loaderObj = entry.getJSONObject("loader");
+                    versions.add(loaderObj.getString("version"));
                 }
                 MAIN.post(() -> callback.onResult(versions));
             } catch (Throwable t) {
@@ -65,8 +204,6 @@ public final class LoaderVersionResolver {
             }
         });
     }
-
-    // ── NeoForge ──────────────────────────────────────────────────────────────
 
     public interface NeoForgeCallback {
         void onResult(@NonNull List<String> versions);
@@ -84,14 +221,12 @@ public final class LoaderVersionResolver {
                 JSONArray arr = obj.optJSONArray("versions");
                 List<String> matching = new ArrayList<>();
                 if (arr != null) {
-                    // NeoForge versions follow pattern: MC_MAJOR.MC_MINOR.MC_PATCH-NEOFORGE
-                    // e.g. "21.1.0" for MC 1.21.1
-                    String prefix = minecraftVersion.length() > 2
-                            ? minecraftVersion.substring(2) // strip "1."
+                    String prefix2 = minecraftVersion.length() > 2
+                            ? minecraftVersion.substring(2)
                             : minecraftVersion;
                     for (int i = arr.length() - 1; i >= 0; i--) {
                         String v = arr.getString(i);
-                        if (v.startsWith(prefix + ".") || v.startsWith(prefix + "-")) {
+                        if (v.startsWith(prefix2 + ".") || v.startsWith(prefix2 + "-")) {
                             matching.add(v);
                         }
                     }
@@ -103,8 +238,6 @@ public final class LoaderVersionResolver {
             }
         });
     }
-
-    // ── Forge (legacy) ────────────────────────────────────────────────────────
 
     public interface ForgeCallback {
         void onResult(@NonNull List<String> versions);
@@ -138,7 +271,7 @@ public final class LoaderVersionResolver {
     // ── HTTP helper ───────────────────────────────────────────────────────────
 
     @NonNull
-    private static String httpGet(@NonNull String requestUrl) throws Exception {
+    private static String httpGet(@NonNull String requestUrl) throws IOException {
         HttpURLConnection conn = null;
         try {
             URL url = new URL(requestUrl);
@@ -151,7 +284,7 @@ public final class LoaderVersionResolver {
 
             int code = conn.getResponseCode();
             if (code < 200 || code >= 300) {
-                throw new IllegalStateException("HTTP " + code + " from " + requestUrl);
+                throw new IOException("HTTP " + code + " from " + requestUrl);
             }
 
             try (BufferedInputStream in = new BufferedInputStream(conn.getInputStream());
@@ -166,3 +299,4 @@ public final class LoaderVersionResolver {
         }
     }
 }
+
