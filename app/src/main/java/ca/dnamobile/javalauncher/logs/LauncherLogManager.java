@@ -13,10 +13,6 @@ import java.io.File;
 
 /**
  * Manages the launcher log file lifecycle.
- *
- * When keepLogs is enabled the most recent game session log is retained on disk
- * so the user can share it for bug reports. Otherwise it is deleted on the next
- * launch.
  */
 public final class LauncherLogManager {
 
@@ -26,8 +22,7 @@ public final class LauncherLogManager {
 
     private static volatile LauncherLogManager instance;
 
-    @NonNull
-    private final Context context;
+    @NonNull private final Context context;
     private boolean keepLogs;
 
     private LauncherLogManager(@NonNull Context context) {
@@ -48,6 +43,18 @@ public final class LauncherLogManager {
         return instance;
     }
 
+    // ── Static convenience methods ────────────────────────────────────────────
+
+    public static boolean isKeepLogHistoryEnabled(@NonNull Context context) {
+        return getInstance(context).isKeepingLogs();
+    }
+
+    public static void setKeepLogHistoryEnabled(@NonNull Context context, boolean enabled) {
+        getInstance(context).setKeepLogs(enabled);
+    }
+
+    // ── Instance API ──────────────────────────────────────────────────────────
+
     public boolean isKeepingLogs() {
         return keepLogs;
     }
@@ -60,7 +67,6 @@ public final class LauncherLogManager {
                 .apply();
     }
 
-    /** Returns the latest log file, or null if none exists. */
     @Nullable
     public File getLatestLogFile() {
         File logDir = new File(context.getFilesDir(), "logs");
@@ -68,7 +74,6 @@ public final class LauncherLogManager {
         return log.isFile() ? log : null;
     }
 
-    /** Returns the directory where log files are stored. */
     @NonNull
     public File getLogDirectory() {
         File logDir = new File(context.getFilesDir(), "logs");
@@ -77,7 +82,6 @@ public final class LauncherLogManager {
         return logDir;
     }
 
-    /** Deletes the latest log file unless keep-logs is enabled. */
     public void cleanupIfNeeded() {
         if (keepLogs) return;
         File log = getLatestLogFile();
@@ -89,7 +93,6 @@ public final class LauncherLogManager {
 
     /**
      * Shares the latest log file using a system share sheet.
-     * Falls back gracefully if no log file is available.
      *
      * @param context any Context — used to start the share Intent.
      */
