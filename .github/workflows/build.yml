@@ -41,53 +41,44 @@ jobs:
             --channel=0
 
       - name: Grant Gradle wrapper execute permission
-        run: chmod +x nexus-launcher/gradlew
+        run: chmod +x gradlew
 
-      # ── Decode keystore from secret (optional: only on tag releases) ──────────
       - name: Decode keystore
         if: startsWith(github.ref, 'refs/tags/')
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > nexus-launcher/app/build/release.jks
-            mkdir -p nexus-launcher/app/build
-            echo "$KEYSTORE_BASE64" | base64 --decode > nexus-launcher/app/build/release.jks
+            mkdir -p app/build
+            echo "$KEYSTORE_BASE64" | base64 --decode > app/build/release.jks
           fi
 
-      # ── Build debug APK (always) ──────────────────────────────────────────────
       - name: Build debug APK
-        working-directory: nexus-launcher
         run: ./gradlew assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx3g"
 
-      # ── Build release APK (on tags only) ─────────────────────────────────────
       - name: Build release APK
         if: startsWith(github.ref, 'refs/tags/')
-        working-directory: nexus-launcher
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx3g"
 
-      # ── Upload debug artifact (all builds) ───────────────────────────────────
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: DroidBridge-debug-${{ github.sha }}
-          path: nexus-launcher/app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
 
-      # ── Upload release artifact (tag builds) ─────────────────────────────────
       - name: Upload release APK artifact
         if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v4
         with:
           name: DroidBridge-release-${{ github.ref_name }}
-          path: nexus-launcher/app/build/outputs/apk/release/*.apk
+          path: app/build/outputs/apk/release/*.apk
           retention-days: 90
 
-      # ── Create GitHub Release on version tags ────────────────────────────────
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
@@ -109,7 +100,7 @@ jobs:
             ### What's changed
             See [commits](${{ github.server_url }}/${{ github.repository }}/commits/${{ github.ref_name }}) for the full change list.
           files: |
-            nexus-launcher/app/build/outputs/apk/release/*.apk
-            nexus-launcher/app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
