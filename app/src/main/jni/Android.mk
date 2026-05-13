@@ -99,7 +99,7 @@ LOCAL_PATH := $(HERE_PATH)
 include $(CLEAR_VARS)
 LOCAL_MODULE := disable_heap_tagging
 LOCAL_SRC_FILES := disable_heap_tagging.c
-LOCAL_LDLIBS := -llog
+LOCAL_LDLIBS := -ldl -llog
 include $(BUILD_SHARED_LIBRARY)
 
 # delete fake libs after linked
