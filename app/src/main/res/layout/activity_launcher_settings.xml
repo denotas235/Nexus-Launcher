@@ -246,6 +246,13 @@
                     android:layout_marginTop="4dp"
                     android:text="@string/renderer_refresh" />
 
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switch_use_native_surface"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Use native SurfaceView (LTW)" />
+
             </LinearLayout>
 
             <!-- ══ CONTROLLER section ══════════════════════════════════════════ -->
@@ -332,14 +339,11 @@
                 android:visibility="gone">
 
                 <!-- RAM slider -->
-                <com.google.android.material.slider.Slider
+                <SeekBar
                     android:id="@+id/slider_allocated_ram"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:valueFrom="512"
-                    android:valueTo="4096"
-                    android:stepSize="128"
-                    android:value="1024" />
+                    android:max="28" />
 
                 <TextView
                     android:id="@+id/text_allocated_ram"
