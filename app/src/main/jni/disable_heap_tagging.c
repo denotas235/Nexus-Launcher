@@ -28,18 +28,8 @@
  * disables bionic heap tagging before OpenJDK does real work.
  */
 
-#include <malloc.h>
+#include <dlfcn.h>
 #include <android/log.h>
-
-/*
- * bionic declares mallopt() with __INTRODUCED_IN(26).  When the compilation
- * target is API < 26, the declaration is invisible even with <malloc.h>.
- * Provide a forward declaration so the compiler is satisfied; the symbol
- * is still present in libc.so on all Android versions we care about.
- */
-#if !defined(__ANDROID_API__) || __ANDROID_API__ < 26
-extern int mallopt(int __option, int __value);
-#endif
 
 #ifndef M_BIONIC_SET_HEAP_TAGGING_LEVEL
 #define M_BIONIC_SET_HEAP_TAGGING_LEVEL (-204)
@@ -51,16 +41,30 @@ extern int mallopt(int __option, int __value);
 
 #define LOG_TAG "DisableHeapTagging"
 
+/*
+ * mallopt() is available in bionic libc on all supported Android versions,
+ * but its linker symbol is only exported from API 26 onwards.
+ * We look it up at runtime via dlsym so this library can be compiled against
+ * APP_PLATFORM=android-21 without a hard link-time dependency.
+ */
+typedef int (*mallopt_fn_t)(int, int);
+
 __attribute__((constructor))
 static void disable_heap_tagging_for_child_process(void) {
 #if defined(__aarch64__)
-    int result = mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, M_HEAP_TAGGING_LEVEL_NONE);
-    __android_log_print(
-            result ? ANDROID_LOG_INFO : ANDROID_LOG_WARN,
-            LOG_TAG,
-            "mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, NONE) result=%d",
-            result
-    );
+    mallopt_fn_t fn = (mallopt_fn_t) dlsym(RTLD_DEFAULT, "mallopt");
+    if (fn) {
+        int result = fn(M_BIONIC_SET_HEAP_TAGGING_LEVEL, M_HEAP_TAGGING_LEVEL_NONE);
+        __android_log_print(
+                result ? ANDROID_LOG_INFO : ANDROID_LOG_WARN,
+                LOG_TAG,
+                "mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL, NONE) result=%d",
+                result
+        );
+    } else {
+        __android_log_print(ANDROID_LOG_INFO, LOG_TAG,
+                "mallopt not available; heap tagging preloader skipped");
+    }
 #else
     __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "heap tagging preloader not needed on this ABI");
 #endif
