@@ -44,14 +44,14 @@ import ca.dnamobile.javalauncher.BuildConfig;
  * and opens the release page or APK asset in the user's browser when they agree.
  */
 public final class LauncherUpdateChecker {
-    private static final String OWNER = "DNAMobileApplications";
-    private static final String REPO = "DroidBridgeLauncher";
+    private static final String OWNER = "denotas235";
+    private static final String REPO = "Nexus-Launcher";
 
     /** Keep false for normal users. GitHub /releases/latest ignores prereleases. */
     private static final boolean INCLUDE_PRERELEASES = false;
 
     private static final String LATEST_RELEASE_URL =
-            "https://api.github.com/repos/DNAMobileApplications/DroidBridgeLauncher/releases/latest";
+            "https://api.github.com/repos/" + OWNER + "/" + REPO + "/releases/latest";
     private static final String RELEASES_URL =
             "https://api.github.com/repos/" + OWNER + "/" + REPO + "/releases?per_page=10";
 

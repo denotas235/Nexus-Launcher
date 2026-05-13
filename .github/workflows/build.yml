@@ -83,19 +83,19 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          name: DroidBridge Launcher ${{ github.ref_name }}
+          name: Nexus Launcher ${{ github.ref_name }}
           draft: false
           prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') || contains(github.ref_name, '-rc') }}
           body: |
-            ## DroidBridge Launcher ${{ github.ref_name }}
+            ## Nexus Launcher ${{ github.ref_name }}
 
             ### Installation
-            1. Download `DroidBridgeLauncher-universal-release.apk` below.
+            1. Download the APK file below (look for a file ending in `.apk`).
             2. On your Android device go to **Settings → Security** and allow installing apps from unknown sources (or from your browser/file manager).
             3. Open the downloaded APK and tap **Install**.
 
             ### Offline play
-            No Microsoft account is required. Create an offline account in the launcher settings and start playing.
+            No Microsoft account is required. Create an offline account in the launcher settings and start playing immediately.
 
             ### What's changed
             See [commits](${{ github.server_url }}/${{ github.repository }}/commits/${{ github.ref_name }}) for the full change list.

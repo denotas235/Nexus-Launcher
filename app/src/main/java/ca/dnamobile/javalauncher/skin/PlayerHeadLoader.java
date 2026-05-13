@@ -30,6 +30,19 @@ public final class PlayerHeadLoader {
     private PlayerHeadLoader() {}
 
     /**
+     * Convenience overload that accepts a {@link android.content.Context} as the first
+     * argument (ignored) so call-sites that pass a Context compile without changes.
+     */
+    public static void loadInto(
+            @NonNull android.content.Context context,
+            @NonNull ImageView imageView,
+            @Nullable AccountStore.Account account,
+            @Nullable File skinFile
+    ) {
+        loadInto(imageView, account, skinFile);
+    }
+
+    /**
      * Loads the player head into {@code imageView}.
      * Falls back to the account username initial if no skin is available.
      */

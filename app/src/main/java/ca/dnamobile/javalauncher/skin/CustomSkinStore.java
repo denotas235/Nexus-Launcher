@@ -17,7 +17,9 @@ public final class CustomSkinStore {
     private static final int EXPECTED_HEIGHT_32 = 32;
     private static final String SKIN_FILENAME = "offline_skin.png";
 
-    private CustomSkinStore() {}
+    /** No-op constructor. All methods are static; the instance is never used. */
+    @SuppressWarnings("unused")
+    public CustomSkinStore(@NonNull Context context) {}
 
     /**
      * Returns the file used to persist the custom offline skin, or null if no
