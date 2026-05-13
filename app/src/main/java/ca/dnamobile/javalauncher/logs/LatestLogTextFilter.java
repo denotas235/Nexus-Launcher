@@ -1,6 +1,7 @@
 package ca.dnamobile.javalauncher.logs;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 /**
  * Simple text filter that strips ANSI escape sequences and
@@ -28,8 +29,28 @@ public final class LatestLogTextFilter {
     public static String filter(@NonNull String rawLine) {
         String cleaned = stripAnsi(rawLine);
         if (cleaned.length() > 1024) {
-            cleaned = cleaned.substring(0, 1024) + "…";
+            cleaned = cleaned.substring(0, 1024) + "\u2026";
+        }
+        return cleaned;
+    }
+
+    /**
+     * Cleans a raw real-time log line for dispatch to log listeners.
+     * Returns null if the line should be suppressed entirely.
+     *
+     * Called by {@code net.kdt.pojavlaunch.Logger} for every line
+     * produced by the native game process.
+     */
+    @Nullable
+    public static String cleanRealtimeLine(@Nullable String rawLine) {
+        if (rawLine == null) return null;
+        String trimmed = rawLine.trim();
+        if (trimmed.isEmpty()) return null;
+        String cleaned = stripAnsi(trimmed);
+        if (cleaned.length() > 2048) {
+            cleaned = cleaned.substring(0, 2048) + "\u2026";
         }
         return cleaned;
     }
 }
+
