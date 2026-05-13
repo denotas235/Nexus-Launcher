@@ -86,6 +86,4 @@ dependencies {
     implementation 'androidx.preference:preference:1.2.1'
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
 
-    // bytehook — needed by jni/Android.mk prefab import
-    implementation 'com.bytedance.android:bytehook:1.1.6'
 }

@@ -8,7 +8,6 @@ HERE_PATH := $(LOCAL_PATH)
 
 LOCAL_PATH := $(HERE_PATH)
 
-$(call import-module,prefab/bytehook)
 LOCAL_PATH := $(HERE_PATH)
 
 
@@ -45,7 +44,7 @@ include $(BUILD_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE := exithook
 LOCAL_LDLIBS := -ldl -llog
-LOCAL_SHARED_LIBRARIES := bytehook pojavexec
+LOCAL_SHARED_LIBRARIES := pojavexec
 LOCAL_SRC_FILES := exit_hook.c
 include $(BUILD_SHARED_LIBRARY)
 
