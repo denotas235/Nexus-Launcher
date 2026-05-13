@@ -31,6 +31,16 @@
 #include <malloc.h>
 #include <android/log.h>
 
+/*
+ * bionic declares mallopt() with __INTRODUCED_IN(26).  When the compilation
+ * target is API < 26, the declaration is invisible even with <malloc.h>.
+ * Provide a forward declaration so the compiler is satisfied; the symbol
+ * is still present in libc.so on all Android versions we care about.
+ */
+#if !defined(__ANDROID_API__) || __ANDROID_API__ < 26
+extern int mallopt(int __option, int __value);
+#endif
+
 #ifndef M_BIONIC_SET_HEAP_TAGGING_LEVEL
 #define M_BIONIC_SET_HEAP_TAGGING_LEVEL (-204)
 #endif
@@ -55,3 +65,4 @@ static void disable_heap_tagging_for_child_process(void) {
     __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "heap tagging preloader not needed on this ABI");
 #endif
 }
+
