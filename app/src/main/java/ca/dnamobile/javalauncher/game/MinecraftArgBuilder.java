@@ -274,7 +274,7 @@ public final class MinecraftArgBuilder {
 
                 File libFile = new File(libsDir, libPath);
                 if (libFile.exists()) {
-                    if (cp.length() > 0) cp.append(:);
+                    if (cp.length() > 0) cp.append(':');
                     cp.append(libFile.getAbsolutePath());
                 }
             }
@@ -283,7 +283,7 @@ public final class MinecraftArgBuilder {
         // Version JAR
         File versionJar = new File(gameDir, "versions/" + versionId + "/" + versionId + ".jar");
         if (versionJar.exists()) {
-            if (cp.length() > 0) cp.append(:);
+            if (cp.length() > 0) cp.append(':');
             cp.append(versionJar.getAbsolutePath());
         }
 
@@ -312,7 +312,7 @@ public final class MinecraftArgBuilder {
         // groupId:artifactId:version[:classifier][@extension]
         String[] parts = coord.split(":");
         if (parts.length < 3) return "";
-        String group    = parts[0].replace(., /);
+        String group    = parts[0].replace('.', '/');
         String artifact = parts[1];
         String version  = parts[2];
         String classifier = (parts.length > 3) ? "-" + parts[3] : "";
@@ -412,7 +412,7 @@ public final class MinecraftArgBuilder {
         StringBuilder sb = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
-            while ((line = reader.readLine()) != null) sb.append(line).append(n);
+            while ((line = reader.readLine()) != null) sb.append(line).append('\n');
         }
         return new JSONObject(sb.toString());
     }
