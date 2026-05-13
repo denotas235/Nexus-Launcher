@@ -11,6 +11,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import java.util.Collections;
+
 import ca.dnamobile.javalauncher.data.AccountStore;
 import ca.dnamobile.javalauncher.instance.LauncherInstance;
 import ca.dnamobile.javalauncher.ui.instance.CreateInstanceDialog;
@@ -107,7 +109,18 @@ public final class MainActivity extends AppCompatActivity
     }
 
     private void showCreateInstanceDialog() {
-        new CreateInstanceDialog(this, this::updateAccountBadge).show();
+        new CreateInstanceDialog(this, Collections.emptyList(), new CreateInstanceDialog.Listener() {
+            @Override
+            public void onPickIcon(@NonNull CreateInstanceDialog dialog) {
+                // Icon picking not implemented in offline build
+            }
+
+            @Override
+            public void onCreateInstance(@NonNull CreateInstanceDialog.Request request) {
+                // Instance creation handled by dialog internally
+                updateAccountBadge();
+            }
+        }).show();
     }
 
     private void launchSelectedInstance() {
@@ -115,7 +128,9 @@ public final class MainActivity extends AppCompatActivity
         AccountStore.Account account = accountStore.load();
         if (account == null) {
             startActivity(new Intent(this, LauncherSettingsActivity.class));
+            return;
         }
-        // Actual launch delegated to game activity when instance launch is wired up
+        // Actual launch delegated to PojavLauncher MainActivity with instance context
+        MainActivity.setCurrentActivity(this);
     }
 }
